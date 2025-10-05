@@ -109,8 +109,18 @@ def dashboard():
     income = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.amount > 0, Transaction.user_id == current_user.id).scalar() or 0.0
     expenses = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.amount < 0, Transaction.user_id == current_user.id).scalar() or 0.0
     recent = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).limit(10).all()
-    print("DEBUG:", income, expenses, len(recent))
-    return render_template('index.html', income=income, expenses=expenses, recent=recent)
+    balance = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id).scalar() or 0.0
+
+    # Calculate expenditures by category for pie chart
+    category_expenses = db.session.query(Category.name, db.func.sum(Transaction.amount))\
+        .join(Transaction, Transaction.category_id == Category.id)\
+        .filter(Transaction.user_id == current_user.id, Transaction.amount < 0)\
+        .group_by(Category.name).all()
+    chart_labels = [cat for cat, amt in category_expenses]
+    chart_data = [abs(amt) for cat, amt in category_expenses]
+
+    print("DEBUG:", income, expenses, balance, len(recent), chart_labels, chart_data)
+    return render_template('index.html', income=income, expenses=expenses, balance=balance, recent=recent, chart_labels=chart_labels, chart_data=chart_data)
 
 @app.route('/transactions')
 @login_required

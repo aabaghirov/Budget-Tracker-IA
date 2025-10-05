@@ -9,8 +9,24 @@
 </head>
 <body>
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
-  <div class="container">
-  <a class="navbar-brand" href="{{ url_for('root') }}">Budget Tracker</a>
+  <div class="container d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center">
+      <a class="navbar-brand me-3" href="{{ url_for('root') }}">Budget Tracker</a>
+      <!-- Account Dropdown -->
+      {% if current_user.is_authenticated %}
+      <div class="dropdown">
+        <button class="btn btn-outline-dark dropdown-toggle" type="button" id="accountDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+          Account
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="accountDropdown">
+          <li><span class="dropdown-item-text">Logged in as <strong>{{ current_user.username }}</strong></span></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{{ url_for('logout') }}">Sign Out</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('login') }}">Switch Account</a></li>
+        </ul>
+      </div>
+      {% endif %}
+    </div>
     <div>
       <a class="btn btn-outline-primary me-2" href="{{ url_for('transactions') }}">Transactions</a>
       <a class="btn btn-outline-secondary me-2" href="{{ url_for('categories_view') }}">Categories</a>
