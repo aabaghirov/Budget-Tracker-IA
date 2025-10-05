@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, f
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 import os
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__, template_folder='templates')
 base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -11,10 +13,32 @@ app.secret_key = os.environ.get('SECRET_KEY', 'devkey')
 
 db = SQLAlchemy(app)
 
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 # ---------- Models ----------
+# --- User Model ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+
+    def set_password(self, password):
+        # force PBKDF2 instead of scrypt
+        self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+    
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), unique=True, nullable=False)
+    name = db.Column(db.String(80), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('categories', lazy=True))
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -24,28 +48,79 @@ class Transaction(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=True)
     category = db.relationship('Category', backref=db.backref('transactions', lazy=True))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('transactions', lazy=True))
 
 # ---------- Routes (UI) ----------
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+        else:
+            user = User(username=username)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash('Registration successful. Please login.')
+            return redirect(url_for('login'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid credentials')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
 @app.route('/test2')
 def test2():
     return render_template('test.html')
 
+
+
+# Root route: redirect to dashboard if logged in, else to login
 @app.route('/')
-def index():
-    income = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.amount > 0).scalar() or 0.0
-    expenses = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.amount < 0).scalar() or 0.0
-    recent = Transaction.query.order_by(Transaction.date.desc()).limit(10).all()
-    print("DEBUG:", income, expenses, len(recent))   # <--- add this
+def root():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    else:
+        return redirect(url_for('login'))
+
+# Dashboard route: show user dashboard if logged in
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    income = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.amount > 0, Transaction.user_id == current_user.id).scalar() or 0.0
+    expenses = db.session.query(db.func.sum(Transaction.amount)).filter(Transaction.amount < 0, Transaction.user_id == current_user.id).scalar() or 0.0
+    recent = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).limit(10).all()
+    print("DEBUG:", income, expenses, len(recent))
     return render_template('index.html', income=income, expenses=expenses, recent=recent)
 
 @app.route('/transactions')
+@login_required
 def transactions():
-    txs = Transaction.query.order_by(Transaction.date.desc()).all()
-    categories = Category.query.order_by(Category.name).all()
+    txs = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).all()
+    categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
     return render_template('transactions.html', transactions=txs, categories=categories)
 
 @app.route('/transactions/new', methods=['GET', 'POST'])
+@login_required
 def new_transaction():
     if request.method == 'POST':
         desc = request.form['description']
@@ -54,15 +129,16 @@ def new_transaction():
         dt = datetime.strptime(date_str, '%Y-%m-%d').date()
         cat_id = request.form.get('category') or None
         category = Category.query.get(cat_id) if cat_id else None
-        t = Transaction(description=desc, amount=amount, date=dt, category=category)
+        t = Transaction(description=desc, amount=amount, date=dt, category=category, user_id=current_user.id)
         db.session.add(t)
         db.session.commit()
         flash('Transaction added.')
         return redirect(url_for('transactions'))
-    categories = Category.query.order_by(Category.name).all()
+    categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
     return render_template('transaction_form.html', categories=categories, tx=None)
 
 @app.route('/transactions/<int:tx_id>/edit', methods=['GET', 'POST'])
+@login_required
 def edit_transaction(tx_id):
     tx = Transaction.query.get_or_404(tx_id)
     if request.method == 'POST':
@@ -78,6 +154,7 @@ def edit_transaction(tx_id):
     return render_template('transaction_form.html', tx=tx, categories=categories)
 
 @app.route('/transactions/<int:tx_id>/delete', methods=['POST'])
+@login_required
 def delete_transaction(tx_id):
     tx = Transaction.query.get_or_404(tx_id)
     db.session.delete(tx)
@@ -87,16 +164,18 @@ def delete_transaction(tx_id):
 
 # ---------- Categories ----------
 @app.route('/categories')
+@login_required
 def categories_view():
-    cats = Category.query.order_by(Category.name).all()
+    cats = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
     return render_template('categories.html', categories=cats)
 
 @app.route('/categories/add', methods=['POST'])
+@login_required
 def add_category():
     name = request.form['name'].strip()
     if name:
-        if not Category.query.filter_by(name=name).first():
-            db.session.add(Category(name=name))
+        if not Category.query.filter_by(name=name, user_id=current_user.id).first():
+            db.session.add(Category(name=name, user_id=current_user.id))
             db.session.commit()
             flash('Category added.')
         else:
@@ -104,6 +183,7 @@ def add_category():
     return redirect(url_for('categories_view'))
 
 @app.route('/categories/<int:cat_id>/delete', methods=['POST'])
+@login_required
 def delete_category(cat_id):
     cat = Category.query.get_or_404(cat_id)
     # remove category from its transactions
@@ -116,6 +196,7 @@ def delete_category(cat_id):
 
 # ---------- API: monthly summary (last 6 months) ----------
 @app.route('/api/summary')
+@login_required
 def api_summary():
     # Query aggregated sums by YYYY-MM (SQLite strftime)
     results = db.session.query(

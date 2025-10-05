@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 style="color:red">Minimal test inside template</h1>
+<div class="container mt-4">
+	<h1 class="display-4">Hello, {{ current_user.username }}!</h1>
+	<p class="lead">Welcome to Budget Tracker. This app helps you manage your income and expenses, categorize transactions, and keep track of your financial health. All your data is private and only visible to you.</p>
+	<hr>
+	<!-- Existing dashboard buttons and content will appear below -->
+	{{ super() }}
+</div>
 {% endblock %}
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-<h1>Hello Flask!</h1>
-</body>
-</html>
