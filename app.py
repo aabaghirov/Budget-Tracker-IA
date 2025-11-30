@@ -58,6 +58,10 @@ def create_app(test_config=None):
     # initialize extensions
     db.init_app(app)
 
+    # Create tables automatically
+    with app.app_context():
+        db.create_all()
+
     # optional metrics
     try:
         from prometheus_flask_exporter import PrometheusMetrics
