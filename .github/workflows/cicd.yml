@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -66,9 +66,6 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Deploy placeholder
+      - name: Deploy to Render
         run: |
-          echo "Deployment would happen here"
-          echo "Only runs on main branch push"
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"

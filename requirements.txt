@@ -4,3 +4,4 @@ prometheus-flask-exporter>=0.18.3
 pytest>=7.0
 pytest-cov>=4.0
 coverage>=6.0
+gunicorn

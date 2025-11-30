@@ -2,6 +2,9 @@
 
 A Flask-based budget tracking application with CI/CD pipeline and monitoring.
 
+## Live Demo
+🌐 **Deployed at**: https://budget-tracker-ia.onrender.com
+
 ## Features
 - Track income and expenses
 - Categorize transactions
@@ -40,7 +43,7 @@ GitHub Actions runs:
 1. **Lint** - Code quality with flake8
 2. **Test** - Unit tests with 70% coverage requirement
 3. **Build** - Docker image build + health check
-4. **Deploy** - Only on main branch (placeholder)
+4. **Deploy** - Auto-deploy to Render (main branch only)
 
 ## API Endpoints
 | Endpoint | Method | Description |
