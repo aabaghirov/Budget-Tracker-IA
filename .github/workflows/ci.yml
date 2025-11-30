@@ -21,15 +21,20 @@ jobs:
       
       - name: Run tests with coverage
         run: |
-          coverage run -m pytest
+          coverage run --source=app -m pytest
           coverage report --fail-under=70
-          coverage xml
+      
+      - name: Generate coverage XML
+        if: always()
+        run: coverage xml || true
       
       - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.xml
+          if-no-files-found: ignore
 
   build:
     needs: test
